@@ -3,20 +3,22 @@ class Store {
     constructor(initialState = {}){
         this._state = initialState;
         this._modifiers = {};
-        this._loading = [];
     }
 
     register(modifier){
-        this._modifiers[modifier.name] = modifier;
+        this._modifiers[modifier.name] = {
+            modifier,
+            loading: false,
+        };
     }
 
     async execute(modifierName){
 
-        const modifier = this._modifiers[modifierName];
+        const modifier = this._modifiers[modifierName].modifier;
         const modifierReducers = modifier.reducers;
 
         for(const reducer of modifierReducers){
-            this._loading.push(reducer.selector);
+            this._modifiers[modifierName].loading = true;
         }
 
         const asyncActionResult = await modifier.asyncAction();
@@ -28,15 +30,20 @@ class Store {
         }
 
         for(const reducer of modifierReducers){
-            this._loading = [];
+            this._modifiers[modifierName].loading = false;
         }
     }
 
     get state(){
         const state = JSON.parse(JSON.stringify(this._state));
-        for(const selector of this._loading){
-            selector(state)._loading = true;
-        }
+
+        Object.values(this._modifiers)
+            .filter((modifier)=>modifier.loading)
+            .forEach((modifier)=>{
+                modifier.modifier.reducers.forEach((reducer)=>{
+                    reducer.selector(state)._loading = true;
+                });
+            });
         return state;
     }
 

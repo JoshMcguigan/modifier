@@ -71,9 +71,10 @@ describe('Store', ()=>{
         it('should set the loading flag on the appropriate data while async function is running', ()=>{
             store.register(modifier1);
             const executePromise = store.execute(modifier1.name);
-            const stateWithPart1Loading = initialState;
-            stateWithPart1Loading[modifierSelectorKey]._loading = true;
-            expect(store.state).toEqual(stateWithPart1Loading);
+
+            // Jest toEqual only looks at enumerable properties, so _loading is checked seperately
+            expect(store.state).toEqual(initialState);
+            expect(store.state[modifierSelectorKey]._loading).toEqual(true);
         });
 
         it('should clear the loading flag and update the data after the async function resolves', async (done)=>{
@@ -83,6 +84,7 @@ describe('Store', ()=>{
             const stateWithPart1DataAdded = initialState;
             stateWithPart1DataAdded[modifierSelectorKey][modifierAsyncKey] = modifier1AsyncActionData;
             expect(store.state).toEqual(stateWithPart1DataAdded);
+            expect(store.state[modifierSelectorKey]._loading).toBe(undefined);
             done();
         });
     });
@@ -95,9 +97,9 @@ describe('Store', ()=>{
             const execute2Promise = store.execute(modifier2.name);
             await execute1Promise;
             const stateWithPart1LoadingAndModifier1Data = initialState;
-            stateWithPart1LoadingAndModifier1Data[modifierSelectorKey]._loading = true;
             stateWithPart1LoadingAndModifier1Data[modifierSelectorKey][modifierAsyncKey] = modifier1AsyncActionData;
             expect(store.state).toEqual(stateWithPart1LoadingAndModifier1Data);
+            expect(store.state[modifierSelectorKey]._loading).toBe(true);
             done();
         });
 
@@ -111,6 +113,7 @@ describe('Store', ()=>{
             const stateWithModifier2Data = initialState;
             stateWithModifier2Data[modifierSelectorKey][modifierAsyncKey] = modifier2AsyncActionData;
             expect(store.state).toEqual(stateWithModifier2Data);
+            expect(store.state[modifierSelectorKey]._loading).toBe(undefined);
             done();
         });
     });

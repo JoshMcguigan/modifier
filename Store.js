@@ -41,9 +41,14 @@ class Store {
             .filter((modifier)=>modifier.loading)
             .forEach((modifier)=>{
                 modifier.modifier.reducers.forEach((reducer)=>{
-                    reducer.selector(state)._loading = true;
+                    Object.defineProperty(reducer.selector(state), '_loading', {
+                        enumerable: false,
+                        writable: false,
+                        value: true
+                    });
                 });
             });
+
         return state;
     }
 

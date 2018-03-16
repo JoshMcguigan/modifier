@@ -37,18 +37,13 @@ describe('Store', ()=>{
         );
 
         modifier2 = new Modifier(
-            // the name of the modifier is used to call it, using the stores execute function
             'part 2 modifier',
             [
                 {
-                    // selector much be a function which returns a child object or array of the state
                     selector: (state)=>state[modifierSelectorKey],
-                    // reducer function is passed the portion of the state tree selected by the selector,
-                    // as well as the results of the async action, and should return updated state
                     reducerFunction: (part1State, asyncActionResult)=>({...part1State, [modifierAsyncKey]: asyncActionResult})
                 }
             ],
-            // the async action results are passed along to the reducer for this modifier
             ()=>new Promise(resolve => setTimeout(() => resolve(modifier2AsyncActionData), 100))
         );
     });
@@ -118,4 +113,73 @@ describe('Store', ()=>{
         });
     });
 
+});
+
+describe('Complex selectors', ()=> {
+    it('should allow selecting for an array', async ()=>{
+        const initialState = {
+            part1: {
+                testArray: []
+            },
+            part2: {}
+        };
+
+        const store = new Store(JSON.parse(JSON.stringify(initialState)));
+        const modifierName = 'test modifier';
+        const newArrayText = 'adding text to array';
+        const modifier = new Modifier(
+            modifierName,
+            [
+                {
+                    selector: (state)=>state.part1.testArray,
+                    reducerFunction: (state, asyncActionResult)=>([...state, asyncActionResult])
+                }
+            ],
+            ()=>new Promise(resolve => setTimeout(() => resolve(newArrayText), 50))
+        );
+        store.register(modifier);
+
+        const executePromise = store.execute(modifierName);
+
+        expect(store.state.part1.testArray._loading).toBe(true);
+
+        await executePromise;
+
+        expect(store.state.part1.testArray[0]).toBe(newArrayText);
+        expect(store.state.part1.testArray.length).toBe(1);
+    });
+
+    it('should allow selecting multiple objects from an array', async ()=>{
+        const initialState = {
+            part1: {
+                testArray: [{id: 7}, {id: 8}, {id: 9}, {id: 10}]
+            },
+            part2: {}
+        };
+
+        const store = new Store(JSON.parse(JSON.stringify(initialState)));
+        const modifierName = 'test modifier';
+        const modifier = new Modifier(
+            modifierName,
+            [
+                {
+                    selector: (state)=>state.part1.testArray.filter(item => item.id > 8),
+                    reducerFunction: (state, asyncActionResult)=>(state[0].id = 20)
+                }
+            ],
+            ()=>new Promise(resolve => setTimeout(() => resolve(), 50))
+        );
+        store.register(modifier);
+
+        const executePromise = store.execute(modifierName);
+
+        expect(store.state.part1.testArray[2]._loading).toBe(true);
+        expect(store.state.part1.testArray[3]._loading).toBe(true);
+
+        await executePromise;
+
+        expect(store.state.part1.testArray[2]._loading).toBe(undefined);
+        expect(store.state.part1.testArray[3]._loading).toBe(undefined);
+        expect(store.state.part1.testArray[2].id).toBe(20);
+    });
 });

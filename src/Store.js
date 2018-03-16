@@ -34,6 +34,24 @@ class Store {
         }
     }
 
+    setLoading(object) {
+
+        // should confirm that this is an object first
+
+        Object.defineProperty(object, '_loading', {
+            enumerable: false,
+            writable: false,
+            value: true
+        });
+
+        Object.keys(object).forEach((key) => {
+            if(typeof object[key] === 'object'){
+                this.setLoading(object[key]);
+            }
+        });
+
+    };
+
     get state(){
         const state = JSON.parse(JSON.stringify(this._state));
 
@@ -41,11 +59,7 @@ class Store {
             .filter((modifier)=>modifier.loading)
             .forEach((modifier)=>{
                 modifier.modifier.reducers.forEach((reducer)=>{
-                    Object.defineProperty(reducer.selector(state), '_loading', {
-                        enumerable: false,
-                        writable: false,
-                        value: true
-                    });
+                    this.setLoading(reducer.selector(state));
                 });
             });
 

@@ -17,21 +17,17 @@ class Store {
         const modifier = this._modifiers[modifierName].modifier;
         const modifierReducers = modifier.reducers;
 
-        for(const reducer of modifierReducers){
-            this._modifiers[modifierName].loading = true;
-        }
+        this._modifiers[modifierName].loading = true;
 
         const asyncActionResult = await modifier.asyncAction();
 
         for(const reducer of modifierReducers){
             const obj = reducer.selector(this._state);
-            const result = reducer.reducerFunction(reducer.selector(this._state), asyncActionResult);
+            const result = reducer.reducerFunction(obj, asyncActionResult);
             Object.assign(obj, result);
         }
 
-        for(const reducer of modifierReducers){
-            this._modifiers[modifierName].loading = false;
-        }
+        this._modifiers[modifierName].loading = false;
     }
 
     setLoading(object) {

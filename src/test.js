@@ -22,7 +22,7 @@ describe('Store', ()=>{
 
         modifier1 = new Modifier(
             // the name of the modifier is used to call it, using the stores execute function
-            'part 1 modifier',
+            'modifier 1',
             [
                 {
                     // selector much be a function which returns a child object or array of the state
@@ -37,7 +37,7 @@ describe('Store', ()=>{
         );
 
         modifier2 = new Modifier(
-            'part 2 modifier',
+            'modifier 2',
             [
                 {
                     selector: (state)=>state[modifierSelectorKey],
@@ -63,13 +63,16 @@ describe('Store', ()=>{
     });
 
     describe('single modifier', ()=> {
-        it('should set the loading flag on the appropriate data while async function is running', ()=>{
+        it('should set the loading flag on the appropriate data while async function is running', async (done)=>{
             store.register(modifier1);
             const executePromise = store.execute(modifier1.name);
 
             // Jest toEqual only looks at enumerable properties, so _loading is checked seperately
             expect(store.state).toEqual(initialState);
             expect(store.state[modifierSelectorKey]._loading).toEqual(true);
+
+            await executePromise;
+            done();
         });
 
         it('should clear the loading flag and update the data after the async function resolves', async (done)=>{
@@ -95,6 +98,7 @@ describe('Store', ()=>{
             stateWithPart1LoadingAndModifier1Data[modifierSelectorKey][modifierAsyncKey] = modifier1AsyncActionData;
             expect(store.state).toEqual(stateWithPart1LoadingAndModifier1Data);
             expect(store.state[modifierSelectorKey]._loading).toBe(true);
+            await execute2Promise;
             done();
         });
 
@@ -181,5 +185,39 @@ describe('Complex selectors', ()=> {
         expect(store.state.part1.testArray[2]._loading).toBe(undefined);
         expect(store.state.part1.testArray[3]._loading).toBe(undefined);
         expect(store.state.part1.testArray[2].id).toBe(20);
+    });
+});
+
+describe('Deeply nested data', ()=> {
+    it('should mark all descendent objects as loading', async (done)=>{
+        const initialState = {
+            part1: {
+                testArray: [{}, {}, {}]
+            },
+            part2: {}
+        };
+
+        const store = new Store(JSON.parse(JSON.stringify(initialState)));
+        const modifierName = 'test modifier';
+        const modifier = new Modifier(
+            modifierName,
+            [
+                {
+                    selector: (state)=>state.part1,
+                    reducerFunction: (state, asyncActionResult)=>{}
+                }
+            ],
+            ()=>new Promise(resolve => setTimeout(() => resolve(), 50))
+        );
+        store.register(modifier);
+
+        const executePromise = store.execute(modifierName);
+
+        expect(store.state.part1.testArray._loading).toBe(true);
+        expect(store.state.part1.testArray[0]._loading).toBe(true);
+
+        await executePromise;
+
+        done();
     });
 });

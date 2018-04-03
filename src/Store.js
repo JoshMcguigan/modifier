@@ -8,7 +8,7 @@ class Store {
     register(modifier){
         this._modifiers[modifier.name] = {
             modifier,
-            loading: false,
+            loading: {},
         };
     }
 
@@ -17,17 +17,21 @@ class Store {
         const modifier = this._modifiers[modifierName].modifier;
         const modifierReducers = modifier.reducers;
 
-        this._modifiers[modifierName].loading = true;
+        const actionInstanceId = process.hrtime()[0];
 
-        const asyncActionResult = await modifier.asyncAction();
+        const args = [].slice.call(arguments, 1); // remove the modifier name and convert the arguments to a real array
+
+        this._modifiers[modifierName].loading[actionInstanceId] = {args};
+
+        const asyncActionResult = await modifier.asyncAction(...args);
 
         for(const reducer of modifierReducers){
-            const obj = reducer.selector(this._state);
+            const obj = reducer.selector(this._state, ...args);
             const result = reducer.reducerFunction(obj, asyncActionResult);
             Object.assign(obj, result);
         }
 
-        this._modifiers[modifierName].loading = false;
+        delete this._modifiers[modifierName].loading[actionInstanceId];
     }
 
     setLoading(object) {
@@ -52,11 +56,14 @@ class Store {
         const state = JSON.parse(JSON.stringify(this._state));
 
         Object.values(this._modifiers)
-            .filter((modifier)=>modifier.loading)
             .forEach((modifier)=>{
-                modifier.modifier.reducers.forEach((reducer)=>{
-                    this.setLoading(reducer.selector(state));
-                });
+                Object.keys(modifier.loading)
+                    .forEach(actionInstanceId=>{
+                        modifier.modifier.reducers.forEach((reducer)=>{
+                            this.setLoading(reducer.selector(state, ...modifier.loading[actionInstanceId].args));
+                        });
+                    })
+
             });
 
         return state;

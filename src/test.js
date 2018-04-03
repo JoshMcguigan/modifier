@@ -3,221 +3,120 @@ const Modifier = require("./Modifier");
 
 describe('Store', ()=>{
 
-    let initialState, store, modifier1, modifier2, modifierSelectorKey, modifierAsyncKey, modifier1AsyncActionData, modifier2AsyncActionData;
+    let initialState, store;
 
     beforeEach(()=>{
         initialState = {
-            part1: {
-                right: 'left'
-            },
-            part2: {}
+            taskGroups: [
+                {
+                    id: 0,
+                    title: 'Holiday Shopping',
+                    tasks: [1, 3]
+                },
+                {
+                    id: 1,
+                    title: 'Open Source',
+                    tasks: [2, 4]
+                }
+            ],
+            tasks: {
+                1: {
+                    title: 'Gift for mom'
+                },
+                2: {
+                    title: 'Responding to issues'
+                },
+                3: {
+                    title: 'Gift for dad'
+                },
+                4: {
+                    title: 'Writing documentation'
+                }
+            }
+
         };
 
-        store = new Store(JSON.parse(JSON.stringify(initialState)));
+        store = new Store(initialState);
 
-        modifierSelectorKey = 'part1';
-        modifierAsyncKey = 'testPart';
-        modifier1AsyncActionData = 'slow data from modifier 1';
-        modifier2AsyncActionData = 'slow data from modifier 2';
-
-        modifier1 = new Modifier(
+        store.register(new Modifier(
             // the name of the modifier is used to call it, using the stores execute function
-            'modifier 1',
+            'ADD_TASK_GROUP',
             [
                 {
                     // selector much be a function which returns a child object or array of the state
-                    selector: (state)=>state[modifierSelectorKey],
+                    selector: (state)=>state['taskGroups'],
                     // reducer function is passed the portion of the state tree selected by the selector,
                     // as well as the results of the async action, and should return updated state
-                    reducerFunction: (part1State, asyncActionResult)=>({...part1State, [modifierAsyncKey]: asyncActionResult})
+                    reducerFunction: (taskGroups, asyncActionResult)=>([...taskGroups, asyncActionResult])
                 }
             ],
             // the async action results are passed along to the reducer for this modifier
-            ()=>new Promise(resolve => setTimeout(() => resolve(modifier1AsyncActionData), 50))
-        );
+            ()=>new Promise(resolve => setTimeout(() => resolve({id: 2, title: 'new task group title', tasks: []}), 50))
+        ));
 
-        modifier2 = new Modifier(
-            'modifier 2',
+        store.register(new Modifier(
+            'ADD_TASK',
             [
                 {
-                    selector: (state)=>state[modifierSelectorKey],
-                    reducerFunction: (part1State, asyncActionResult)=>({...part1State, [modifierAsyncKey]: asyncActionResult})
+                    selector: (state, taskGroupId)=>state['taskGroups'].filter(taskGroup=>taskGroup.id===taskGroupId),
+                    reducerFunction: ([taskGroup], newTask)=>({...taskGroup, tasks: [...taskGroup.tasks, newTask.id]})
+                },
+                {
+                    selector: (state)=>state['tasks'],
+                    reducerFunction: (tasks, newTask)=>({...tasks, [newTask.id]: {title: newTask.title}})
                 }
             ],
-            ()=>new Promise(resolve => setTimeout(() => resolve(modifier2AsyncActionData), 100))
-        );
+            (taskGroupId)=>new Promise(resolve => setTimeout(() => resolve({id: 5, title: 'new task title'}), 50))
+        ));
+
     });
 
-    describe('setup', ()=>{
-        it('should correctly initialize state', async ()=>{
-            store.register(modifier1);
+    describe('store', ()=>{
+        it('should correctly initialize state', ()=>{
             expect(store.state).toEqual(initialState);
         });
 
-        it('should return a deep copy of state (not the original)', async ()=>{
-            const initialState = {};
-            const store = new Store(initialState);
+        it('should return a deep copy of state (not the original)', ()=>{
             // shallow equals check here confirms a copy was returned
             expect(store.state).not.toBe(initialState);
         });
     });
 
-    describe('single modifier', ()=> {
+    describe('ADD_TASK_GROUP', ()=> {
         it('should set the loading flag on the appropriate data while async function is running', async (done)=>{
-            store.register(modifier1);
-            const executePromise = store.execute(modifier1.name);
+            const executePromise = store.execute('ADD_TASK_GROUP');
 
             // Jest toEqual only looks at enumerable properties, so _loading is checked seperately
             expect(store.state).toEqual(initialState);
-            expect(store.state[modifierSelectorKey]._loading).toEqual(true);
+            expect(store.state['taskGroups']._loading).toEqual(true);
 
             await executePromise;
             done();
         });
 
         it('should clear the loading flag and update the data after the async function resolves', async (done)=>{
-            store.register(modifier1);
-            const executePromise = store.execute(modifier1.name);
+            await store.execute('ADD_TASK_GROUP');
+
+            // Jest toEqual only looks at enumerable properties, so _loading is checked seperately
+            expect(store.state['taskGroups'][2].title).toBe('new task group title');
+            expect(store.state['taskGroups']._loading).toBe(undefined);
+
+            done();
+        });
+    });
+
+
+    describe('ADD_TASK', ()=> {
+        it('pass arguments from execute to selectors and async actions', async (done)=>{
+            const executePromise = store.execute('ADD_TASK', 1);
+
+            // Jest toEqual only looks at enumerable properties, so _loading is checked seperately
+            expect(store.state).toEqual(initialState);
+            expect(store.state['taskGroups'][1]._loading).toEqual(true);
+
             await executePromise;
-            const stateWithPart1DataAdded = initialState;
-            stateWithPart1DataAdded[modifierSelectorKey][modifierAsyncKey] = modifier1AsyncActionData;
-            expect(store.state).toEqual(stateWithPart1DataAdded);
-            expect(store.state[modifierSelectorKey]._loading).toBe(undefined);
             done();
         });
     });
 
-    describe('two modifiers that modify the same portion of the store', ()=> {
-        it('should maintain loading flag after one async action finishes if the other is still running', async (done)=>{
-            store.register(modifier1);
-            store.register(modifier2);
-            const execute1Promise = store.execute(modifier1.name);
-            const execute2Promise = store.execute(modifier2.name);
-            await execute1Promise;
-            const stateWithPart1LoadingAndModifier1Data = initialState;
-            stateWithPart1LoadingAndModifier1Data[modifierSelectorKey][modifierAsyncKey] = modifier1AsyncActionData;
-            expect(store.state).toEqual(stateWithPart1LoadingAndModifier1Data);
-            expect(store.state[modifierSelectorKey]._loading).toBe(true);
-            await execute2Promise;
-            done();
-        });
-
-        it('should clear the loading flag after both async functions are complete', async (done)=>{
-            store.register(modifier1);
-            store.register(modifier2);
-            const execute1Promise = store.execute(modifier1.name);
-            const execute2Promise = store.execute(modifier2.name);
-            await execute1Promise;
-            await execute2Promise;
-            const stateWithModifier2Data = initialState;
-            stateWithModifier2Data[modifierSelectorKey][modifierAsyncKey] = modifier2AsyncActionData;
-            expect(store.state).toEqual(stateWithModifier2Data);
-            expect(store.state[modifierSelectorKey]._loading).toBe(undefined);
-            done();
-        });
-    });
-
-});
-
-describe('Complex selectors', ()=> {
-    it('should allow selecting for an array', async ()=>{
-        const initialState = {
-            part1: {
-                testArray: []
-            },
-            part2: {}
-        };
-
-        const store = new Store(JSON.parse(JSON.stringify(initialState)));
-        const modifierName = 'test modifier';
-        const newArrayText = 'adding text to array';
-        const modifier = new Modifier(
-            modifierName,
-            [
-                {
-                    selector: (state)=>state.part1.testArray,
-                    reducerFunction: (state, asyncActionResult)=>([...state, asyncActionResult])
-                }
-            ],
-            ()=>new Promise(resolve => setTimeout(() => resolve(newArrayText), 50))
-        );
-        store.register(modifier);
-
-        const executePromise = store.execute(modifierName);
-
-        expect(store.state.part1.testArray._loading).toBe(true);
-
-        await executePromise;
-
-        expect(store.state.part1.testArray[0]).toBe(newArrayText);
-        expect(store.state.part1.testArray.length).toBe(1);
-    });
-
-    it('should allow selecting multiple objects from an array', async ()=>{
-        const initialState = {
-            part1: {
-                testArray: [{id: 7}, {id: 8}, {id: 9}, {id: 10}]
-            },
-            part2: {}
-        };
-
-        const store = new Store(JSON.parse(JSON.stringify(initialState)));
-        const modifierName = 'test modifier';
-        const modifier = new Modifier(
-            modifierName,
-            [
-                {
-                    selector: (state)=>state.part1.testArray.filter(item => item.id > 8),
-                    reducerFunction: (state, asyncActionResult)=>(state[0].id = 20)
-                }
-            ],
-            ()=>new Promise(resolve => setTimeout(() => resolve(), 50))
-        );
-        store.register(modifier);
-
-        const executePromise = store.execute(modifierName);
-
-        expect(store.state.part1.testArray[2]._loading).toBe(true);
-        expect(store.state.part1.testArray[3]._loading).toBe(true);
-
-        await executePromise;
-
-        expect(store.state.part1.testArray[2]._loading).toBe(undefined);
-        expect(store.state.part1.testArray[3]._loading).toBe(undefined);
-        expect(store.state.part1.testArray[2].id).toBe(20);
-    });
-});
-
-describe('Deeply nested data', ()=> {
-    it('should mark all descendent objects as loading', async (done)=>{
-        const initialState = {
-            part1: {
-                testArray: [{}, {}, {}]
-            },
-            part2: {}
-        };
-
-        const store = new Store(JSON.parse(JSON.stringify(initialState)));
-        const modifierName = 'test modifier';
-        const modifier = new Modifier(
-            modifierName,
-            [
-                {
-                    selector: (state)=>state.part1,
-                    reducerFunction: (state, asyncActionResult)=>{}
-                }
-            ],
-            ()=>new Promise(resolve => setTimeout(() => resolve(), 50))
-        );
-        store.register(modifier);
-
-        const executePromise = store.execute(modifierName);
-
-        expect(store.state.part1.testArray._loading).toBe(true);
-        expect(store.state.part1.testArray[0]._loading).toBe(true);
-
-        await executePromise;
-
-        done();
-    });
 });
